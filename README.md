@@ -1,0 +1,828 @@
+# RankForge — Design Spec
+
+## 1. Goal
+
+Build a mini search-ranking system that answers:
+
+> Given a user query and thousands of documents, how do we retrieve and rank the most relevant results?
+
+This project demonstrates:
+
+* keyword retrieval
+* semantic retrieval
+* candidate merging
+* feature engineering
+* learning-to-rank ML
+* optional neural reranking
+* evaluation using search metrics
+
+---
+
+## 2. One-line Project Description
+
+**RankForge** is a hybrid search and ML ranking engine that retrieves candidate documents using BM25 + embeddings, then ranks them using a trained relevance model.
+
+---
+
+## 3. High-Level Architecture
+
+```text
+Documents
+  ↓
+Indexing Pipeline
+  ├── BM25 Index
+  └── Vector Index
+       ↓
+
+User Query
+  ↓
+Query Processor
+  ↓
+Candidate Retrieval
+  ├── BM25 Search
+  └── Embedding Search
+       ↓
+Candidate Merger
+       ↓
+Feature Builder
+       ↓
+ML Ranker
+       ↓
+Final Ranked Results
+       ↓
+Optional LLM Answer Generator
+```
+
+---
+
+# 4. Core Components
+
+## 4.1 Document Corpus
+
+For POC, use:
+
+```text
+1,000–10,000 documents
+```
+
+Each document:
+
+```json
+{
+  "doc_id": "doc_001",
+  "title": "Reducing LLM Inference Cost",
+  "body": "Prompt caching, batching, and routing can reduce inference cost...",
+  "category": "AI Infrastructure",
+  "created_at": "2026-04-01"
+}
+```
+
+Later, replace with:
+
+```text
+web crawler → collected documents → corpus
+```
+
+---
+
+## 4.2 Indexing Pipeline
+
+Runs before search.
+
+### Responsibilities
+
+For every document:
+
+1. clean text
+2. tokenize text
+3. build BM25 index
+4. create document embedding
+5. store embedding in vector index
+
+### Output
+
+```text
+BM25 index
+Vector index
+Document metadata store
+```
+
+Recommended tools:
+
+```text
+BM25: rank-bm25
+Embeddings: sentence-transformers
+Vector search: FAISS
+Storage: SQLite / JSON / Parquet
+```
+
+---
+
+# 5. Query-Time Flow
+
+## 5.1 Query Processor
+
+Input:
+
+```json
+{
+  "query": "how to reduce LLM inference cost"
+}
+```
+
+Output:
+
+```json
+{
+  "clean_query": "how to reduce llm inference cost",
+  "tokens": ["reduce", "llm", "inference", "cost"],
+  "query_embedding": [...]
+}
+```
+
+Important:
+
+* BM25 uses tokens / cleaned query
+* vector search uses full query embedding
+
+---
+
+## 5.2 Candidate Retrieval
+
+Retrieve candidates from two systems.
+
+### A. BM25 Search
+
+Finds exact keyword matches.
+
+```text
+query → BM25 index → top 50 docs
+```
+
+Good for:
+
+* exact technical terms
+* names
+* specific phrases
+
+Example:
+
+```text
+"LLM inference cost" → docs containing those words
+```
+
+---
+
+### B. Embedding Search
+
+Finds semantic matches.
+
+```text
+query embedding → FAISS → top 50 docs
+```
+
+Good for:
+
+```text
+"reduce AI API bill"
+```
+
+matching:
+
+```text
+"LLM inference cost optimization"
+```
+
+---
+
+## 5.3 Candidate Merger
+
+Merge BM25 and vector candidates.
+
+Input:
+
+```text
+BM25 top 50
+Vector top 50
+```
+
+Output:
+
+```json
+{
+  "doc_id": "doc_123",
+  "bm25_score": 12.4,
+  "bm25_rank": 3,
+  "vector_score": 0.82,
+  "vector_rank": 7,
+  "retrieved_by_bm25": true,
+  "retrieved_by_vector": true
+}
+```
+
+Rules:
+
+* dedupe by `doc_id`
+* keep all scores
+* if missing BM25 score, set `0`
+* if missing vector score, set `0`
+* keep rank position from each retriever
+
+---
+
+# 6. Feature Builder
+
+For each query-document pair, generate features for the ML ranker.
+
+## Feature list
+
+```json
+{
+  "bm25_score": 12.4,
+  "vector_score": 0.82,
+  "bm25_rank": 3,
+  "vector_rank": 7,
+  "title_overlap": 0.6,
+  "body_overlap": 0.3,
+  "doc_length": 850,
+  "query_length": 5,
+  "category_match": 1,
+  "freshness_days": 12,
+  "retrieved_by_bm25": 1,
+  "retrieved_by_vector": 1
+}
+```
+
+## Feature meanings
+
+| Feature               | Meaning                         |
+| --------------------- | ------------------------------- |
+| `bm25_score`          | keyword relevance               |
+| `vector_score`        | semantic relevance              |
+| `bm25_rank`           | rank from BM25                  |
+| `vector_rank`         | rank from vector search         |
+| `title_overlap`       | query tokens appearing in title |
+| `body_overlap`        | query tokens appearing in body  |
+| `doc_length`          | total document word count       |
+| `query_length`        | query word count                |
+| `freshness_days`      | document age                    |
+| `retrieved_by_bm25`   | whether BM25 found it           |
+| `retrieved_by_vector` | whether vector search found it  |
+
+---
+
+# 7. ML Ranker
+
+## Purpose
+
+The ranker predicts:
+
+```text
+relevance_score(query, document)
+```
+
+Input:
+
+```text
+features for query-document pair
+```
+
+Output:
+
+```json
+{
+  "doc_id": "doc_123",
+  "relevance_score": 0.91
+}
+```
+
+Final result:
+
+```text
+sort candidates by relevance_score descending
+```
+
+---
+
+## 7.1 V1 Ranker — LightGBM / XGBoost
+
+Use this first.
+
+Why:
+
+* great for tabular features
+* common in search ranking
+* fast training
+* interpretable
+* works well with small datasets
+
+Training data format:
+
+```json
+{
+  "query_id": "q_001",
+  "doc_id": "doc_123",
+  "bm25_score": 12.4,
+  "vector_score": 0.82,
+  "title_overlap": 0.6,
+  "body_overlap": 0.3,
+  "relevance_label": 3
+}
+```
+
+Relevance labels:
+
+```text
+0 = not relevant
+1 = weakly relevant
+2 = relevant
+3 = highly relevant
+```
+
+---
+
+## 7.2 V2 Ranker — MiniBERT Cross-Encoder
+
+Use after V1.
+
+Input:
+
+```text
+[query] + [document title/body]
+```
+
+Output:
+
+```text
+relevance score 0–1
+```
+
+Example:
+
+```text
+Query: "how to reduce LLM inference cost"
+Document: "Prompt caching and batching reduce token usage..."
+Score: 0.94
+```
+
+Why it helps:
+
+* understands query-document interaction
+* better for nuanced relevance
+* slower than LightGBM
+
+Use only on top candidates:
+
+```text
+BM25/vector → top 100
+LightGBM → top 20
+MiniBERT reranker → final top 10
+```
+
+---
+
+# 8. Training Data
+
+## 8.1 What data is needed?
+
+You need:
+
+```text
+query
+document
+relevance_label
+```
+
+Example:
+
+```json
+{
+  "query": "reduce LLM inference cost",
+  "document": "Prompt caching and batching reduce token usage...",
+  "relevance_label": 3
+}
+```
+
+---
+
+## 8.2 How to create POC data
+
+### Option A — Synthetic corpus
+
+Generate documents across categories:
+
+```text
+AI infrastructure
+distributed systems
+databases
+cloud systems
+machine learning
+mobile release engineering
+finance systems
+```
+
+Generate queries for each category.
+
+For each query:
+
+* assign 1–3 highly relevant docs
+* assign 5–10 somewhat relevant docs
+* assign random irrelevant docs
+
+---
+
+## 8.3 Label generation
+
+For POC:
+
+```text
+exact topic match → label 3
+same category → label 2
+related category → label 1
+unrelated → label 0
+```
+
+Later:
+
+* use human labeling
+* use LLM judge
+* use click logs
+
+---
+
+# 9. Evaluation
+
+Use search ranking metrics.
+
+## Metrics
+
+### Precision@K
+
+```text
+Of top K results, how many are relevant?
+```
+
+Example:
+
+```text
+Precision@5 = 4/5 = 0.8
+```
+
+---
+
+### Recall@K
+
+```text
+Of all relevant docs, how many appeared in top K?
+```
+
+---
+
+### MRR
+
+Mean Reciprocal Rank.
+
+Measures:
+
+```text
+How high is the first relevant result?
+```
+
+Example:
+
+```text
+first relevant result at rank 2 → 1/2 = 0.5
+```
+
+---
+
+### NDCG@K
+
+Most important.
+
+Measures:
+
+```text
+Are highly relevant docs ranked near the top?
+```
+
+Use:
+
+```text
+NDCG@10
+```
+
+---
+
+# 10. APIs
+
+## 10.1 Search API
+
+### Request
+
+```json
+{
+  "query": "how to reduce LLM inference cost",
+  "top_k": 10
+}
+```
+
+### Response
+
+```json
+{
+  "query": "how to reduce LLM inference cost",
+  "results": [
+    {
+      "doc_id": "doc_123",
+      "title": "Reducing LLM Inference Cost",
+      "relevance_score": 0.94,
+      "bm25_score": 13.2,
+      "vector_score": 0.88,
+      "rank_reason": "High semantic similarity and title overlap"
+    }
+  ]
+}
+```
+
+---
+
+## 10.2 Explain API
+
+### Request
+
+```json
+{
+  "query": "how to reduce LLM inference cost",
+  "doc_id": "doc_123"
+}
+```
+
+### Response
+
+```json
+{
+  "doc_id": "doc_123",
+  "features": {
+    "bm25_score": 13.2,
+    "vector_score": 0.88,
+    "title_overlap": 0.75,
+    "body_overlap": 0.42
+  },
+  "ranker_score": 0.94,
+  "explanation": "Document ranked highly due to strong keyword match and semantic similarity."
+}
+```
+
+---
+
+# 11. UI
+
+Use Streamlit.
+
+## Pages
+
+### Page 1 — Search
+
+Input:
+
+```text
+query box
+top_k slider
+```
+
+Output:
+
+```text
+ranked docs
+scores
+retrieval source
+```
+
+---
+
+### Page 2 — Debug Ranking
+
+Show for each candidate:
+
+```text
+BM25 score
+vector score
+LightGBM score
+final rank
+```
+
+---
+
+### Page 3 — Evaluation
+
+Show:
+
+```text
+Precision@5
+MRR
+NDCG@10
+comparison:
+- BM25 only
+- vector only
+- hybrid + ranker
+```
+
+---
+
+# 12. Implementation Plan
+
+## Phase 1 — Corpus + Indexing
+
+Build:
+
+* document generator
+* document store
+* BM25 index
+* FAISS index
+
+Deliverable:
+
+```text
+search BM25 top docs
+search vector top docs
+```
+
+---
+
+## Phase 2 — Hybrid Retrieval
+
+Build:
+
+* query processor
+* BM25 retriever
+* vector retriever
+* candidate merger
+
+Deliverable:
+
+```text
+merged top 100 candidates with BM25/vector scores
+```
+
+---
+
+## Phase 3 — Feature Builder
+
+Build features:
+
+```text
+title_overlap
+body_overlap
+doc_length
+query_length
+freshness_days
+retrieved_by flags
+```
+
+Deliverable:
+
+```text
+feature matrix for query-doc candidates
+```
+
+---
+
+## Phase 4 — Train LightGBM Ranker
+
+Build:
+
+* relevance dataset
+* train/test split by query
+* LightGBM ranker
+* save model
+
+Deliverable:
+
+```text
+ranker.pkl
+```
+
+---
+
+## Phase 5 — Evaluation
+
+Compare:
+
+```text
+BM25 only
+vector only
+hybrid no ranker
+hybrid + ranker
+```
+
+Metrics:
+
+```text
+Precision@5
+MRR
+NDCG@10
+```
+
+---
+
+## Phase 6 — Streamlit Demo
+
+Build UI:
+
+* search page
+* ranking debug page
+* evaluation page
+
+---
+
+## Phase 7 — Optional MiniBERT Reranker
+
+Add:
+
+```text
+top 20 candidates → MiniBERT cross-encoder → final rerank
+```
+
+---
+
+# 13. Suggested Folder Structure
+
+```text
+rankforge/
+  app/
+    streamlit_app.py
+  data/
+    corpus.jsonl
+    queries.jsonl
+    relevance_labels.jsonl
+  src/
+    indexing/
+      build_bm25.py
+      build_faiss.py
+    retrieval/
+      bm25_retriever.py
+      vector_retriever.py
+      hybrid_retriever.py
+    ranking/
+      feature_builder.py
+      train_ranker.py
+      ranker.py
+      bert_reranker.py
+    evaluation/
+      metrics.py
+      evaluate.py
+    api/
+      search_service.py
+  models/
+    lightgbm_ranker.pkl
+  README.md
+```
+
+---
+
+# 14. Tech Stack
+
+```text
+Python
+Streamlit
+rank-bm25
+sentence-transformers
+FAISS
+LightGBM
+scikit-learn
+pandas
+numpy
+```
+
+Optional:
+
+```text
+FastAPI
+MiniLM / MiniBERT cross-encoder
+Docker
+```
+
+---
+
+# 15. Resume Bullet
+
+Use this later:
+
+> Built RankForge, a hybrid search and learning-to-rank system combining BM25 keyword retrieval, dense embeddings, FAISS vector search, and LightGBM-based ranking, evaluated using NDCG and MRR.
+
+Advanced version:
+
+> Added a MiniBERT cross-encoder reranker to improve final result relevance by modeling query-document interactions over top retrieved candidates.
+
+---
+
+# 16. LinkedIn Project Description
+
+```text
+Built RankForge, a hybrid search and ML ranking engine that retrieves candidate documents using BM25 keyword search and dense embedding search, then ranks results using a trained learning-to-rank model.
+
+The system includes query processing, candidate merging, feature generation, LightGBM-based relevance ranking, and evaluation using Precision@K, MRR, and NDCG.
+
+Designed to demonstrate how modern search systems combine retrieval, machine learning ranking, and production-style evaluation.
+```
