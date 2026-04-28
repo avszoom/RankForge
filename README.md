@@ -5,7 +5,7 @@
 | Phase | Status |
 |---|---|
 | Phase 0 — Synthetic dataset (LLM-generated) | ✅ Shipped |
-| Phase 1 — BM25 + FAISS indexing | ⏳ Next |
+| Phase 1 — BM25 + FAISS indexing ([design doc](docs/indexing.md)) | ⏳ Next |
 | Phase 2 — Hybrid retrieval | ⏳ |
 | Phase 3 — Feature builder | ⏳ |
 | Phase 4 — LightGBM ranker | ⏳ |
