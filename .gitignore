@@ -1,0 +1,22 @@
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Pipeline cache (regeneratable from API; don't bloat the repo)
+data/_raw/
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+
+# Generated artifacts (kept out until we decide otherwise)
+models/
