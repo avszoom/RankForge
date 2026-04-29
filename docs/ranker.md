@@ -79,7 +79,7 @@ For supervised learning we need:
 | `doc_length` | token count of `title + body` | longer docs may be more authoritative — or just noisier |
 | `query_length` | token count of the query | short queries behave differently from long ones |
 | `freshness_days` | `(today − doc.created_at).days` | doc age — fresher often more relevant |
-| `category_match` | 1 if the query's `target_category` equals the doc's `category` else 0 | leaks the train signal a bit; we'll measure with and without |
+| ~~`category_match`~~ | (removed) | An earlier version included this but it leaked the query's ground-truth target_category. Dropped — see [feature-builder.md](feature-builder.md#caveats-and-design-choices). |
 
 ### How rows are constructed
 

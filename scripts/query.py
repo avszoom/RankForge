@@ -7,9 +7,8 @@ Examples:
     python scripts/query.py "mobile crash dashboards" --retriever vector
     python scripts/query.py "real-time chat scaling" --retriever hybrid --top-k 15
 
-    # Trained LightGBM ranker — defaults to top-20
-    python scripts/query.py "reduce LLM inference cost" \\
-        --retriever ranker --target-category "LLM Systems & Inference"
+    # Trained LightGBM ranker — defaults to top-20, no extra args needed
+    python scripts/query.py "reduce LLM inference cost" --retriever ranker
 """
 from __future__ import annotations
 
@@ -111,9 +110,6 @@ def main() -> int:
                    help="Per-retriever fetch size for hybrid/ranker (default 50)")
     p.add_argument("--retriever-top-k", type=int, default=100,
                    help="Hybrid candidate-pool size before ranker scores (default 100)")
-    p.add_argument("--target-category", default=None,
-                   help="Required for ranker mode (used for the category_match feature). "
-                        "In a real system this would come from a query classifier.")
     p.add_argument("--corpus", default=str(REPO / "data" / "corpus.jsonl"))
     args = p.parse_args()
 
@@ -141,14 +137,9 @@ def main() -> int:
         )
         _print_hybrid(cands, corpus)
     else:  # ranker
-        if not args.target_category:
-            sys.exit("--target-category is required for --retriever ranker "
-                     "(used for the category_match feature). "
-                     "Pass one from the canonical 21-category list.")
         from src.ranking.ranker import LightGBMRanker
         ranked = LightGBMRanker().rank(
             query=args.query,
-            target_category=args.target_category,
             top_k=args.top_k,
             per_retriever=args.per_retriever,
             retriever_top_k=args.retriever_top_k,

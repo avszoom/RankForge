@@ -33,7 +33,7 @@ For one row, you start at the root, answer the questions, and the leaf you land 
 
 **Why decision trees for ranking:**
 - They handle messy, mixed-scale features natively. `bm25_score` ranges 0–30, `vector_score` ranges -1 to 1, `query_length` is an int — no normalization needed.
-- They learn non-linear interactions automatically. "If `bm25_score` is high AND `category_match` is 1 AND `freshness_days < 90`" becomes a single leaf.
+- They learn non-linear interactions automatically. "If `bm25_score` is high AND `title_overlap >= 0.5` AND `freshness_days < 90`" becomes a single leaf.
 - They're interpretable. You can literally read the trees to see what the model relies on.
 
 **Why one tree isn't enough:**
@@ -401,7 +401,7 @@ Output looks like:
 bm25_score                   12,450
 vector_score                 10,890
 title_overlap                 6,210
-category_match                4,118     ← the leaky feature
+title_overlap                 4,118
 freshness_days                3,002
 body_overlap                  2,701
 retrieved_by_vector           1,886
@@ -412,7 +412,7 @@ doc_length                      632
 query_length                    280
 ```
 
-(Numbers illustrative.) This tells us exactly what the model relied on. If `category_match` dwarfs everything, we'd know the model is leaning on the labeled-category "leak" rather than learning useful signal from the retrievers.
+(Numbers illustrative.) This tells us exactly what the model relied on. In our actual trained model, `vector_rank` carries 77.5% of the gain and `bm25_rank` 10% — the rank-based features dominate. The `retrieved_by_*` flags ended up at 0% importance (redundant with the rank features), and we deliberately removed an earlier `category_match` feature that was a label leak. See [feature-builder.md](feature-builder.md#caveats-and-design-choices).
 
 ---
 

@@ -10,8 +10,7 @@
     "body_overlap",
     "doc_length",
     "query_length",
-    "freshness_days",
-    "category_match"
+    "freshness_days"
   ],
   "label_column": "relevance",
   "id_columns": [

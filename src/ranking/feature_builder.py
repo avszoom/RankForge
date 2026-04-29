@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import json
 import logging
-from collections import Counter, defaultdict
+from collections import Counter
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
@@ -44,7 +44,9 @@ FEATURE_COLUMNS = [
     "doc_length",
     "query_length",
     "freshness_days",
-    "category_match",
+    # NB: an earlier version included a category-match feature, but it either
+    # leaked the query's ground-truth target_category, or as a no-leak proxy
+    # was redundant with the rank features (~1% feature importance). Dropped.
 ]
 LABEL_COLUMN = "relevance"
 ALL_COLUMNS = ID_COLUMNS + FEATURE_COLUMNS + [LABEL_COLUMN, "split"]
@@ -126,7 +128,6 @@ class FeatureBuilder:
         self,
         query_id: str,
         query_text: str,
-        target_category: str,
         doc_id: str,
         candidate,
     ) -> dict:
@@ -157,26 +158,28 @@ class FeatureBuilder:
             "doc_length": doc.doc_length,
             "query_length": q_len,
             "freshness_days": freshness_days,
-            "category_match": int(doc.category == target_category),
             LABEL_COLUMN: self._labels.get((query_id, doc_id), 0),
         }
 
     def build_for_queries(self, queries: Iterable[dict]) -> pd.DataFrame:
-        """Run hybrid retrieval on each query and emit one DataFrame of rows."""
+        """Run hybrid retrieval on each query and emit one DataFrame of rows.
+
+        Note: queries.jsonl's `target_category` field is intentionally NOT used
+        — it would leak the ground-truth label of what the query is about.
+        """
         self._load()
         rows: list[dict] = []
         n = 0
         for q in queries:
             query_id = q["query_id"]
             query_text = q["query"]
-            target_category = q["target_category"]
             split = q.get("split", "train")
 
             cands = self.retriever.search(
                 query_text, top_k=self.top_k, per_retriever=self.per_retriever,
             )
             for c in cands:
-                row = self._row(query_id, query_text, target_category, c.doc_id, c)
+                row = self._row(query_id, query_text, c.doc_id, c)
                 row["split"] = split
                 rows.append(row)
             n += 1

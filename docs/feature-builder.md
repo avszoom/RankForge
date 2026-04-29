@@ -8,9 +8,9 @@
 
 ## Purpose
 
-For every `(query, candidate_doc)` pair, produce a 15-column row containing:
+For every `(query, candidate_doc)` pair, produce a 14-column row containing:
 - **2 IDs** for grouping/traceability,
-- **12 features** the LightGBM ranker will learn from,
+- **11 features** the LightGBM ranker will learn from,
 - **1 label** (graded relevance from `data/relevance.jsonl`, defaulting to 0).
 
 The same builder runs at training time (with labels looked up) and at inference time (labels not needed). One code path → no train/serve skew.
@@ -35,16 +35,16 @@ python scripts/build_features.py --per-retriever 50 --top-k 100
 Outputs land in `data/`:
 
 ```
-data/features_train.parquet     1.4 MB    94,822 rows × 15 cols
-data/features_test.parquet      0.2 MB    10,116 rows × 15 cols
-data/features_meta.json         641 B     schema + run config
+data/features_train.parquet     1.3 MB    94,822 rows × 14 cols
+data/features_test.parquet      0.2 MB    10,116 rows × 14 cols
+data/features_meta.json         600 B     schema + run config
 ```
 
 ---
 
 ## Output schema
 
-15 columns. Same schema in train and test parquet files.
+14 columns. Same schema in train and test parquet files.
 
 ### ID columns (carried through, not used as features)
 
@@ -53,7 +53,7 @@ data/features_meta.json         641 B     schema + run config
 | `query_id` | string | foreign key to `queries.jsonl` |
 | `doc_id` | string | foreign key to `corpus.jsonl` |
 
-### Feature columns (12) — what the ranker sees
+### Feature columns (11) — what the ranker sees
 
 | Column | Type | Source / formula | Captures |
 |---|---|---|---|
@@ -68,7 +68,14 @@ data/features_meta.json         641 B     schema + run config
 | `doc_length` | int | token count of `title + body` (after stopword filter) | doc verbosity / authority |
 | `query_length` | int | token count of query (after stopword filter) | short vs long queries behave differently |
 | `freshness_days` | int | `corpus_max_date − doc.created_at` (in days) | doc age, anchored to corpus's most recent doc for reproducibility |
-| `category_match` | int (0/1) | `1 if query.target_category == doc.category else 0` | leak-prone but useful — see "Caveats" |
+
+> **Removed feature: `category_match`.** An earlier version included a flag
+> `int(doc.category == query.target_category)`. That **leaked the ground-truth
+> category** of the query (a real ranker wouldn't know what the query is
+> "supposed to" be about). A no-leak proxy (most-common category among the
+> hybrid candidates) was tested but only contributed ~1% feature importance —
+> redundant with `vector_rank` and `bm25_rank`. Dropped for the cleanest model.
+> Honest NDCG@10 dropped from 0.934 (leaky) → **0.886** (this version).
 
 ### Label column (training only)
 
@@ -146,7 +153,6 @@ The other ~80% used the default-0. **What this means:** for most candidates the 
     'doc_length': 160,
     'query_length': 4,
     'freshness_days': 89,
-    'category_match': 1,
     'relevance': 3                                   # highly relevant
 }
 ```
@@ -207,13 +213,17 @@ We use **999**. The `retrieved_by_*` flags carry the same information in a clean
 
 ## Caveats and design choices
 
-### `category_match` is a soft "label leak"
+### No category-based feature (label-leak avoidance)
 
-The query JSON has `target_category`, which we generated alongside the query. So this feature is, in essence, telling the model "this candidate is in the same category as the gold-truth target." That's strong signal — too strong if categories perfectly correlate with relevance.
+An earlier version had `category_match = int(query.target_category == doc.category)`. That used the query's ground-truth target category as a feature, which a real ranker would never have at inference time. We measured the impact:
 
-Why we keep it:
-- In a real system you'd derive `category_match` from a query classifier, which is its own problem. Here we use the gold target_category as a proxy for what such a classifier would output.
-- Phase 5 evaluation will report metrics **with and without** this feature so we can measure how much of the ranker's lift is from this single feature vs the others.
+| Feature variant | Valid NDCG@10 | Notes |
+|---|---|---|
+| **`category_match` (leaky)** | 0.934 | Inflated — uses ground truth |
+| `top_category_match` (no-leak proxy: most-common category among hybrid candidates) | 0.879 | Honest, but contributed only 1.1% feature importance |
+| **No category feature (current)** | **0.886** | Honest, simplest, slightly better than the proxy |
+
+The retriever's `vector_rank` (78% feature importance) and `bm25_rank` (10%) already encode "is this doc in the dominant category" implicitly — top-ranked docs almost always belong to the query's true category. An explicit category feature was redundant.
 
 ### Default-0 labeling for unlabeled candidates
 

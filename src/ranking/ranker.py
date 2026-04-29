@@ -75,7 +75,6 @@ class LightGBMRanker:
     def rank(
         self,
         query: str,
-        target_category: str,
         top_k: int = 20,
         per_retriever: int = 50,
         retriever_top_k: int = 100,
@@ -84,30 +83,24 @@ class LightGBMRanker:
 
         Returns: list of (Candidate, ranker_score), sorted by ranker_score descending.
 
-        target_category is needed so the feature builder can compute category_match.
-        For real production use you'd derive it from a query classifier; for our POC
-        callers pass it explicitly.
+        No `target_category` arg — the feature builder derives the proxy
+        (top_retrieved_category) from the candidate set itself, so no ground
+        truth is needed at inference.
         """
         self._load()
-        candidates = self.retriever.search(
-            query, top_k=retriever_top_k, per_retriever=per_retriever,
-        ) if self.retriever else HybridRetriever().search(
+        retriever = self.retriever or HybridRetriever()
+        candidates = retriever.search(
             query, top_k=retriever_top_k, per_retriever=per_retriever,
         )
         if not candidates:
             return []
 
-        # Build feature rows for these candidates without a relevance lookup.
-        rows = []
-        # Ensure FeatureBuilder has loaded its corpus + reference date.
         self.feature_builder._load()
-        # We construct a single fake "query dict" so we can reuse _row().
-        # No labels are read — we ignore the relevance value the row contains.
+        rows = []
         for c in candidates:
             row = self.feature_builder._row(
                 query_id="<inference>",
                 query_text=query,
-                target_category=target_category,
                 doc_id=c.doc_id,
                 candidate=c,
             )
