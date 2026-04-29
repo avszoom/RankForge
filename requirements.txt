@@ -17,3 +17,6 @@ pyarrow>=16.0.0
 # Phase 4 — LightGBM ranker
 lightgbm>=4.3.0
 joblib>=1.4.0
+
+# Phase 6 — Streamlit UI
+streamlit>=1.36.0

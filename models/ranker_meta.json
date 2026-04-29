@@ -1,0 +1,113 @@
+{
+  "feature_columns": [
+    "bm25_score",
+    "bm25_rank",
+    "vector_score",
+    "vector_rank",
+    "retrieved_by_bm25",
+    "retrieved_by_vector",
+    "title_overlap",
+    "body_overlap",
+    "doc_length",
+    "query_length",
+    "freshness_days"
+  ],
+  "label_column": "relevance",
+  "best_iteration": 40,
+  "train_seconds": 1.3,
+  "ndcg_eval_at": [
+    5,
+    10,
+    20
+  ],
+  "best_train_metric": {
+    "ndcg@5": 0.9212284743016895,
+    "ndcg@10": 0.8951169880566529,
+    "ndcg@20": 0.8762144939598819
+  },
+  "best_valid_metric": {
+    "ndcg@5": 0.9103583152371352,
+    "ndcg@10": 0.8855684843130458,
+    "ndcg@20": 0.8729460882272454
+  },
+  "n_train_rows": 94822,
+  "n_test_rows": 10116,
+  "n_train_queries": 1215,
+  "n_test_queries": 129,
+  "params": {
+    "objective": "lambdarank",
+    "metric": "ndcg",
+    "ndcg_eval_at": [
+      5,
+      10,
+      20
+    ],
+    "lambdarank_truncation_level": 20,
+    "learning_rate": 0.05,
+    "num_leaves": 31,
+    "min_data_in_leaf": 20,
+    "feature_fraction": 0.9,
+    "bagging_fraction": 0.8,
+    "bagging_freq": 5,
+    "verbose": -1,
+    "seed": 42,
+    "deterministic": true
+  },
+  "feature_importance": [
+    {
+      "feature": "vector_rank",
+      "gain": 67283.9684984684,
+      "splits": 237
+    },
+    {
+      "feature": "bm25_rank",
+      "gain": 8382.328452706337,
+      "splits": 228
+    },
+    {
+      "feature": "doc_length",
+      "gain": 7605.294232726097,
+      "splits": 164
+    },
+    {
+      "feature": "title_overlap",
+      "gain": 1342.691519856453,
+      "splits": 186
+    },
+    {
+      "feature": "vector_score",
+      "gain": 1039.0313762426376,
+      "splits": 132
+    },
+    {
+      "feature": "bm25_score",
+      "gain": 654.0363010168076,
+      "splits": 123
+    },
+    {
+      "feature": "body_overlap",
+      "gain": 362.25917994976044,
+      "splits": 78
+    },
+    {
+      "feature": "freshness_days",
+      "gain": 92.55630075931549,
+      "splits": 31
+    },
+    {
+      "feature": "query_length",
+      "gain": 72.05778002738953,
+      "splits": 21
+    },
+    {
+      "feature": "retrieved_by_bm25",
+      "gain": 0.0,
+      "splits": 0
+    },
+    {
+      "feature": "retrieved_by_vector",
+      "gain": 0.0,
+      "splits": 0
+    }
+  ]
+}

@@ -11,7 +11,7 @@
 | Phase 4 — LightGBM ranker ([beginner explainer](docs/lightgbm-beginner.md), [foundations](docs/lightgbm-ranker.md), [higher-level design](docs/ranker.md)) | ✅ Shipped |
 | Phase 5 — Evaluation: best NDCG@10 = **0.883** (LightGBM ranker, [details](docs/evaluation.md)) | ✅ Shipped |
 | Phase 7 — Cross-encoder reranker ([design](docs/cross-encoder.md), [architecture](docs/cross-encoder-architecture.md)) — implemented; regressed by 7.7 NDCG points on this synthetic data ([analysis](docs/evaluation.md#why-the-cross-encoder-didnt-help)) | ✅ Shipped (negative result) |
-| Phase 6 — Streamlit UI + deployment | ⏳ Next |
+| Phase 6 — Streamlit UI + deployment ([guide](docs/deployment.md)) | ✅ Shipped |
 
 ## Quickstart
 
@@ -39,7 +39,18 @@ python scripts/query.py "your query" --retriever ranker --top-k 20
 
 # Side-by-side compare: hybrid vs trained ranker, with movement arrows + body excerpts
 python scripts/compare.py "your query" --top-k 10
+
+# 3-way: Hybrid → LightGBM → Cross-Encoder
+python scripts/compare.py "your query" --with-ce --top-k 10
 ```
+
+### Streamlit demo
+
+```bash
+streamlit run app/streamlit_app.py
+```
+
+Browse the corpus taxonomy in the sidebar, search any query, see top-10 from all 5 setups (BM25 / FAISS / Hybrid / LightGBM / +Cross-Encoder) and the latency each stage adds. Deployment guide: [`docs/deployment.md`](docs/deployment.md).
 
 ## Data Pipeline
 

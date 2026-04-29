@@ -18,8 +18,16 @@ data/_raw/
 .vscode/
 .idea/
 
-# Generated artifacts (kept out until we decide otherwise)
-models/
+# Generated artifacts. We DO commit the small index/model files so the
+# Streamlit app boots on a fresh clone (and on Streamlit Cloud) without
+# needing a full rebuild. Larger transient files stay ignored.
+models/*
+!models/bm25.pkl
+!models/faiss.index
+!models/faiss_doc_ids.json
+!models/ranker.pkl
+!models/ranker.txt
+!models/ranker_meta.json
 
 # Phase 3 feature parquet (regenerable; ~1.6 MB; library-coupled binary format)
 # features_meta.json IS committed - it documents the schema
