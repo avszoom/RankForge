@@ -13,3 +13,7 @@ numpy>=1.26.0
 # Phase 3 — feature builder (parquet I/O + dataframes)
 pandas>=2.2.0
 pyarrow>=16.0.0
+
+# Phase 4 — LightGBM ranker
+lightgbm>=4.3.0
+joblib>=1.4.0
