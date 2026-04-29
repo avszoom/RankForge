@@ -20,3 +20,7 @@ data/_raw/
 
 # Generated artifacts (kept out until we decide otherwise)
 models/
+
+# Phase 3 feature parquet (regenerable; ~1.6 MB; library-coupled binary format)
+# features_meta.json IS committed - it documents the schema
+data/features_*.parquet

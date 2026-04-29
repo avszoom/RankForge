@@ -7,8 +7,8 @@
 | Phase 0 — Synthetic dataset (LLM-generated) | ✅ Shipped |
 | Phase 1 — BM25 + FAISS indexing ([design doc](docs/indexing.md)) | ✅ Shipped |
 | Phase 2 — Hybrid retrieval (RRF-fused candidate merger) | ✅ Shipped |
-| Phase 3 — Feature builder ([design doc](docs/ranker.md)) | ⏳ Next |
-| Phase 4 — LightGBM ranker ([design doc](docs/ranker.md)) | ⏳ |
+| Phase 3 — Feature builder ([design](docs/ranker.md), [implementation](docs/feature-builder.md)) | ✅ Shipped |
+| Phase 4 — LightGBM ranker ([design doc](docs/ranker.md)) | ⏳ Next |
 | Phase 5 — Evaluation (NDCG@10, MRR, P@K) | ⏳ |
 | Phase 6 — Streamlit UI | ⏳ |
 | Phase 7 — MiniBERT cross-encoder reranker (optional) | ⏳ |

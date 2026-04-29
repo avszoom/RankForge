@@ -1,0 +1,31 @@
+{
+  "feature_columns": [
+    "bm25_score",
+    "bm25_rank",
+    "vector_score",
+    "vector_rank",
+    "retrieved_by_bm25",
+    "retrieved_by_vector",
+    "title_overlap",
+    "body_overlap",
+    "doc_length",
+    "query_length",
+    "freshness_days",
+    "category_match"
+  ],
+  "label_column": "relevance",
+  "id_columns": [
+    "query_id",
+    "doc_id"
+  ],
+  "row_order": "query_id ASC, then bm25_score DESC, vector_score DESC",
+  "n_train_rows": 94822,
+  "n_test_rows": 10116,
+  "n_train_queries": 1215,
+  "n_test_queries": 129,
+  "retriever_config": {
+    "per_retriever": 50,
+    "top_k": 100
+  },
+  "feature_builder_version": "0.1"
+}
