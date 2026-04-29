@@ -24,3 +24,6 @@ models/
 # Phase 3 feature parquet (regenerable; ~1.6 MB; library-coupled binary format)
 # features_meta.json IS committed - it documents the schema
 data/features_*.parquet
+
+# Phase 5 evaluation parquet (regenerable). eval_summary.json IS committed.
+data/eval_results.parquet
