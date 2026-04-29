@@ -9,6 +9,9 @@ Examples:
 
     # Trained LightGBM ranker — defaults to top-20, no extra args needed
     python scripts/query.py "reduce LLM inference cost" --retriever ranker
+
+    # Two-stage: LightGBM (top-20) -> CrossEncoder rerank -> top-10
+    python scripts/query.py "reduce LLM inference cost" --retriever ranker_ce
 """
 from __future__ import annotations
 
@@ -72,6 +75,31 @@ def _print_hybrid(candidates, corpus: dict[str, dict]) -> None:
         print(f"  {rank:>4}  {src:<6}  {bm_s}/{bm_r}  {v_s}/{v_r}  {c.doc_id:<10}  {d.get('category','')[:28]:<28}  {title_short}")
 
 
+def _print_two_stage(items, corpus: dict[str, dict]) -> None:
+    """Print two-stage rankings — shows lgbm_score, lgbm_rank (stage 1), and ce_score (stage 2)."""
+    print(f"\n=== Two-Stage Ranker  (LightGBM stage1 → CrossEncoder stage2 → top {len(items)}) ===")
+    if not items:
+        print("  (no results)")
+        return
+    print(f"  {'CE':>3}  {'L':>3}  {'Δ':<5}  {'ce_score':>8}  {'lgbm_score':>10}  {'doc_id':<10}  {'category':<26}  title")
+    print(f"  {'-'*3}  {'-'*3}  {'-'*5}  {'-'*8}  {'-'*10}  {'-'*10}  {'-'*26}  {'-'*40}")
+    for i, item in enumerate(items, 1):
+        d = corpus.get(item.candidate.doc_id, {})
+        hn = " [HN]" if d.get("is_hard_negative") else ""
+        title_short = textwrap.shorten(d.get("title", "") + hn, width=55, placeholder="…")
+        cat_short = (d.get("category", "") or "")[:26]
+        delta = item.lgbm_rank - i  # positive = CE promoted
+        if delta > 0:
+            mv = f"↑{delta}"
+        elif delta < 0:
+            mv = f"↓{-delta}"
+        else:
+            mv = "="
+        print(f"  {i:>3}  {item.lgbm_rank:>3}  {mv:<5}  "
+              f"{item.ce_score:>8.3f}  {item.lgbm_score:>10.3f}  "
+              f"{item.candidate.doc_id:<10}  {cat_short:<26}  {title_short}")
+
+
 def _print_ranker(ranked, corpus: dict[str, dict]) -> None:
     print(f"\n=== LightGBM RANKER  (top {len(ranked)}) ===")
     if not ranked:
@@ -103,7 +131,7 @@ def main() -> int:
                    help="Number of results to display. Default: 20 for ranker, else 10.")
     p.add_argument(
         "--retriever",
-        choices=["bm25", "vector", "both", "hybrid", "ranker"],
+        choices=["bm25", "vector", "both", "hybrid", "ranker", "ranker_ce"],
         default="both",
     )
     p.add_argument("--per-retriever", type=int, default=50,
@@ -114,7 +142,11 @@ def main() -> int:
     args = p.parse_args()
 
     if args.top_k is None:
-        args.top_k = 20 if args.retriever == "ranker" else 10
+        args.top_k = (
+            10 if args.retriever == "ranker_ce"
+            else 20 if args.retriever == "ranker"
+            else 10
+        )
 
     corpus = _load_corpus_map(Path(args.corpus))
     print(f"\nQuery: {args.query!r}")
@@ -136,7 +168,7 @@ def main() -> int:
             args.query, top_k=args.top_k, per_retriever=args.per_retriever,
         )
         _print_hybrid(cands, corpus)
-    else:  # ranker
+    elif args.retriever == "ranker":
         from src.ranking.ranker import LightGBMRanker
         ranked = LightGBMRanker().rank(
             query=args.query,
@@ -145,6 +177,15 @@ def main() -> int:
             retriever_top_k=args.retriever_top_k,
         )
         _print_ranker(ranked, corpus)
+    else:  # ranker_ce — two-stage: LightGBM + CrossEncoder
+        from src.ranking.two_stage import TwoStageRanker
+        items = TwoStageRanker(stage1_top_k=20).rank(
+            query=args.query,
+            top_k=args.top_k,
+            per_retriever=args.per_retriever,
+            retriever_top_k=args.retriever_top_k,
+        )
+        _print_two_stage(items, corpus)
 
     print()
     return 0

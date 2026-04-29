@@ -56,8 +56,11 @@ Each test query is run through 4 setups, each producing a top-50 ranked list of 
 | faiss      | 0.764   | 0.743   | 0.698   | 0.834  | 0.771  | 0.739  | 0.295  | 0.466  |
 | hybrid_rrf | 0.762   | 0.741   | 0.685   | 0.821  | 0.772  | 0.738  | 0.295  | 0.460  |
 | **ranker** | **0.910** | **0.883** | **0.764** | **0.950** | **0.907** | **0.871** | **0.349** | 0.463 |
+| ranker_ce  | 0.824   | 0.806   | 0.733   | 0.875  | 0.834  | 0.804  | 0.322  | 0.463 |
 
-**Headline:** **NDCG@10 = 0.883** for the trained ranker. That's a **+14.2 NDCG points** lift over the best non-learned baseline (RRF at 0.741) and **+24 NDCG points** over BM25 alone.
+**Headline:** **NDCG@10 = 0.883** for the trained LightGBM ranker. That's a **+14.2 NDCG points** lift over the best non-learned baseline (RRF at 0.741) and **+24 NDCG points** over BM25 alone.
+
+**The cross-encoder rerank (`ranker_ce`) regressed by 7.7 NDCG points** vs LightGBM alone. See [§ "Why the cross-encoder didn't help"](#why-the-cross-encoder-didnt-help) below.
 
 ### Two non-obvious findings
 
@@ -82,7 +85,31 @@ noisy          — short, telegraphic, no articles, e.g. "llm cost fix"
 | faiss      | 0.801           | 0.696                | 0.730           |
 | hybrid_rrf | 0.846           | 0.647                | 0.740           |
 | **ranker** | **0.954**       | **0.825**            | **0.865**       |
+| ranker_ce  | 0.895           | 0.729                | 0.796           |
 | **ranker lift over RRF** | **+10.8** | **+17.8** | **+12.5** |
+| ranker_ce delta vs ranker | −5.9 | **−9.5** | −6.9 |
+
+### Why the cross-encoder didn't help
+
+Phase 7 was supposed to nudge NDCG@10 from 0.883 up toward 0.90+. Instead it regressed to 0.806 — a 7.7 point drop. The CE hurt **across every query type**, with the biggest damage on paraphrase queries (−9.5 NDCG@10). Honest analysis of why:
+
+1. **The LightGBM stage is already very strong on this corpus.** When stage 1 already gets the right doc to rank 1–3 in 90%+ of cases, there's little headroom for stage 2 to improve. The CE has more opportunities to *introduce* errors than to fix them — and it took some.
+
+2. **Domain mismatch with MS MARCO.** `cross-encoder/ms-marco-MiniLM-L-6-v2` was trained on real Bing queries against real web text. Our docs are GPT-generated synthetic blog posts in a uniform style. The model judges relevance using patterns it learned on a very different distribution.
+
+3. **Synthetic-data signal mismatch.** On a sanity-check exact query (*"how to reduce LLM inference cost"*) the CE produces nicely-separated positive scores (5–8) and promotes the right docs. On a paraphrase query (*"ways to make AI API cheaper"*) all 20 candidates land in `[-8, -2]` — the CE is correctly saying *"none of these answer the question well"* but is then forced to pick a winner among bad options, and its ordering of "least bad" is noisier than LightGBM's tabular features predicted.
+
+4. **Label scheme mismatch.** MS MARCO has binary relevance (clicked = relevant). Our labels are graded 0–3 with same-category-different-topic = label 2. The CE doesn't know about our label structure and may rate label-2 ≈ label-3 docs similarly, which pushes graded-NDCG down.
+
+### What this finding actually means
+
+It's an honest negative result: **on this specific dataset with a strong LightGBM baseline, the off-the-shelf MS MARCO CE doesn't add value.** That doesn't mean cross-encoders are useless — it means:
+
+- **For real product data**, where LightGBM features may be weaker and queries are noisier, the CE often does help (this is well-documented in industry papers).
+- **For synthetic data** like ours where the corpus is short, uniform, and well-aligned with the generated queries, the LightGBM ranker already extracts most of the available signal.
+- **A domain-adapted CE** (fine-tuned on RankForge-style data, or just a different off-the-shelf model like `BAAI/bge-reranker-base`) might recover or beat the LightGBM. We didn't try this.
+
+The RankForge code keeps both setups available — `--retriever ranker` for production-quality results, `--retriever ranker_ce` for the experiment. The cross-encoder explainer (`docs/cross-encoder-architecture.md`) is still pedagogically useful even though the eval result was unfavorable.
 
 ### What the per-type table tells us
 

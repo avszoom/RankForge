@@ -16,6 +16,7 @@ from tqdm import tqdm
 
 from src.evaluation.metrics import mrr, ndcg_at_k, precision_at_k, recall_at_k
 from src.ranking.ranker import LightGBMRanker
+from src.ranking.two_stage import TwoStageRanker
 from src.retrieval.bm25_retriever import BM25Retriever
 from src.retrieval.hybrid_retriever import HybridRetriever
 from src.retrieval.vector_retriever import VectorRetriever
@@ -26,7 +27,7 @@ REPO = Path(__file__).resolve().parents[2]
 QUERIES_PATH = REPO / "data" / "queries.jsonl"
 RELEVANCE_PATH = REPO / "data" / "relevance.jsonl"
 
-SETUPS = ("bm25", "faiss", "hybrid_rrf", "ranker")
+SETUPS = ("bm25", "faiss", "hybrid_rrf", "ranker", "ranker_ce")
 EVAL_TOP_K = 50  # deepest top-K we need (for recall@50); all other metrics slice from this
 
 
@@ -76,9 +77,10 @@ def evaluate(
     vec = VectorRetriever()
     hybrid = HybridRetriever()
     ranker = LightGBMRanker()
+    two_stage = TwoStageRanker(lgbm=ranker)  # share the LightGBM instance
 
     rows: list[dict] = []
-    iterator = tqdm(queries, desc=f"eval ({len(queries)} queries × 4 setups)") if progress else queries
+    iterator = tqdm(queries, desc=f"eval ({len(queries)} queries × {len(SETUPS)} setups)") if progress else queries
     for q in iterator:
         qid = q["query_id"]
         labels = labels_by_query.get(qid, {})
@@ -91,12 +93,16 @@ def evaluate(
         ranker_preds = [c.doc_id for c, _ in ranker.rank(
             q["query"], top_k=top_k, per_retriever=50, retriever_top_k=100,
         )]
+        ranker_ce_preds = two_stage.rank_eval_list(
+            q["query"], top_k=top_k, per_retriever=50, retriever_top_k=100,
+        )
 
         for setup, preds in (
             ("bm25", bm25_preds),
             ("faiss", faiss_preds),
             ("hybrid_rrf", hybrid_preds),
             ("ranker", ranker_preds),
+            ("ranker_ce", ranker_ce_preds),
         ):
             row = {
                 "query_id": qid,

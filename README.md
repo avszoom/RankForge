@@ -9,9 +9,9 @@
 | Phase 2 — Hybrid retrieval (RRF-fused candidate merger) | ✅ Shipped |
 | Phase 3 — Feature builder ([design](docs/ranker.md), [implementation](docs/feature-builder.md)) | ✅ Shipped |
 | Phase 4 — LightGBM ranker ([beginner explainer](docs/lightgbm-beginner.md), [foundations](docs/lightgbm-ranker.md), [higher-level design](docs/ranker.md)) | ✅ Shipped |
-| Phase 5 — Evaluation: NDCG@10 = **0.883** ([results + interpretation](docs/evaluation.md)) | ✅ Shipped |
-| Phase 7 — Cross-encoder reranker ([design doc](docs/cross-encoder.md)) | ⏳ Next |
-| Phase 6 — Streamlit UI + deployment | ⏳ After Phase 7 |
+| Phase 5 — Evaluation: best NDCG@10 = **0.883** (LightGBM ranker, [details](docs/evaluation.md)) | ✅ Shipped |
+| Phase 7 — Cross-encoder reranker ([design](docs/cross-encoder.md), [architecture](docs/cross-encoder-architecture.md)) — implemented; regressed by 7.7 NDCG points on this synthetic data ([analysis](docs/evaluation.md#why-the-cross-encoder-didnt-help)) | ✅ Shipped (negative result) |
+| Phase 6 — Streamlit UI + deployment | ⏳ Next |
 
 ## Quickstart
 
