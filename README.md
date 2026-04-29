@@ -10,8 +10,8 @@
 | Phase 3 — Feature builder ([design](docs/ranker.md), [implementation](docs/feature-builder.md)) | ✅ Shipped |
 | Phase 4 — LightGBM ranker ([beginner explainer](docs/lightgbm-beginner.md), [foundations](docs/lightgbm-ranker.md), [higher-level design](docs/ranker.md)) | ✅ Shipped |
 | Phase 5 — Evaluation: NDCG@10 = **0.883** ([results + interpretation](docs/evaluation.md)) | ✅ Shipped |
-| Phase 6 — Streamlit UI | ⏳ |
-| Phase 7 — MiniBERT cross-encoder reranker (optional) | ⏳ |
+| Phase 7 — Cross-encoder reranker ([design doc](docs/cross-encoder.md)) | ⏳ Next |
+| Phase 6 — Streamlit UI + deployment | ⏳ After Phase 7 |
 
 ## Quickstart
 
