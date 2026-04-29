@@ -1,12 +1,15 @@
-"""Compare hybrid (RRF) retrieval vs the trained LightGBM ranker for a single query.
+"""Compare retrieval / ranking pipelines for a single query.
 
-Runs both pipelines on the same query and prints an annotated side-by-side
-view showing exactly which docs the ranker promoted, demoted, or pulled in.
+Default mode: 2-way (Hybrid RRF vs LightGBM Ranker).
+With --with-ce flag: 3-way (Hybrid → LightGBM → CrossEncoder).
 
 Examples:
     python scripts/compare.py "how to reduce LLM inference cost"
     python scripts/compare.py "ways to make AI API cheaper" --top-k 10
     python scripts/compare.py "consensus algorithms" --body-chars 250
+
+    # 3-way: see how CE re-orders LightGBM's top-20
+    python scripts/compare.py "ways to make AI API cheaper" --with-ce --top-k 10
 """
 from __future__ import annotations
 
@@ -62,6 +65,65 @@ def _print_row(r_rank, h_rank_str, mv, doc_id, category, title, body_excerpt, ra
         print()
 
 
+def _run_three_way(args, corpus: dict[str, dict]) -> int:
+    """3-way: Hybrid (RRF) → LightGBM Ranker → CrossEncoder, top-K."""
+    from src.retrieval.hybrid_retriever import HybridRetriever
+    from src.ranking.two_stage import TwoStageRanker
+
+    hybrid_pool = max(args.top_k * 5, args.retriever_top_k)
+    hybrid = HybridRetriever().search(
+        args.query, top_k=hybrid_pool, per_retriever=args.per_retriever,
+    )
+    h_rank_by_id: dict[str, int] = {c.doc_id: i + 1 for i, c in enumerate(hybrid)}
+
+    two_stage = TwoStageRanker(stage1_top_k=20)
+    items = two_stage.rank(
+        args.query,
+        top_k=args.top_k,
+        per_retriever=args.per_retriever,
+        retriever_top_k=args.retriever_top_k,
+    )
+
+    print(f"=== Hybrid (RRF) → LightGBM Ranker → CrossEncoder, top {args.top_k} ===\n")
+    print(f"  {'CE':>3}  {'L':>3}  {'H':>3}  {'Δ_L':<5}  {'Δ_H':<5}  "
+          f"{'ce_score':>9}  {'lgbm':>6}  {'doc_id':<10}  {'category':<24}  title")
+    print("  " + "  ".join([
+        "-" * 3, "-" * 3, "-" * 3, "-" * 5, "-" * 5,
+        "-" * 9, "-" * 6, "-" * 10, "-" * 24, "-" * 40,
+    ]))
+
+    for ce_rank, item in enumerate(items, 1):
+        doc_id = item.candidate.doc_id
+        d = corpus.get(doc_id, {})
+        h = h_rank_by_id.get(doc_id)
+        title = d.get("title", "") + (" [HN]" if d.get("is_hard_negative") else "")
+        title_short = textwrap.shorten(title, width=55, placeholder="…")
+        cat_short = (d.get("category", "") or "")[:24]
+
+        delta_l = item.lgbm_rank - ce_rank   # positive = CE promoted vs LightGBM
+        mv_l = "=" if delta_l == 0 else (f"↑{delta_l}" if delta_l > 0 else f"↓{-delta_l}")
+        if h is None:
+            mv_h = "✱"
+        else:
+            delta_h = h - ce_rank
+            mv_h = "=" if delta_h == 0 else (f"↑{delta_h}" if delta_h > 0 else f"↓{-delta_h}")
+
+        h_str = str(h) if h is not None else "—"
+        print(f"  {ce_rank:>3}  {item.lgbm_rank:>3}  {h_str:>3}  {mv_l:<5}  {mv_h:<5}  "
+              f"{item.ce_score:>9.3f}  {item.lgbm_score:>6.3f}  "
+              f"{doc_id:<10}  {cat_short:<24}  {title_short}")
+        if args.body_chars:
+            body = _excerpt(d.get("body", ""), args.body_chars)
+            print(f"        │ {body}\n")
+
+    print()
+    print("  legend: CE=cross-encoder rank, L=LightGBM rank, H=hybrid rank")
+    print("  Δ_L = how CE moved this doc from LightGBM's order  (↑n promoted, ↓n demoted)")
+    print("  Δ_H = total movement from hybrid order  (✱ = was outside hybrid pool)")
+    print()
+    return 0
+
+
 def main() -> int:
     p = argparse.ArgumentParser(description="Compare hybrid retrieval vs trained ranker on one query.")
     p.add_argument("query", help="The search query.")
@@ -73,11 +135,16 @@ def main() -> int:
                    help="Hybrid candidate-pool size before ranker scores (default 100)")
     p.add_argument("--body-chars", type=int, default=200,
                    help="Number of body chars to include per doc (default 200; 0 to disable)")
+    p.add_argument("--with-ce", action="store_true",
+                   help="3-way compare: Hybrid → LightGBM → CrossEncoder rerank")
     p.add_argument("--corpus", default=str(REPO / "data" / "corpus.jsonl"))
     args = p.parse_args()
 
     corpus = _load_corpus_map(Path(args.corpus))
     print(f"\nQuery: {args.query!r}\n")
+
+    if args.with_ce:
+        return _run_three_way(args, corpus)
 
     # Run both pipelines on the same retrieved candidate set.
     from src.retrieval.hybrid_retriever import HybridRetriever
